@@ -9,16 +9,18 @@ export class WappiClient {
   }
 
   async sendText({ chatId, recipient, body }) {
-    if (!chatId && !recipient) {
+    const normalizedRecipient = recipient || recipientFromChatId(chatId);
+
+    if (!chatId && !normalizedRecipient) {
       throw new Error('sendText requires chatId or recipient');
     }
 
     const url = new URL('/api/sync/message/send', this.baseUrl);
     url.searchParams.set('profile_id', this.profileId);
 
-    const payload = chatId
-      ? { chat_id: chatId, body }
-      : { recipient, body };
+    const payload = normalizedRecipient
+      ? { recipient: normalizedRecipient, body }
+      : { chat_id: chatId, body };
 
     const response = await fetchWithTimeout(
       url,
@@ -50,4 +52,11 @@ function safeJson(text) {
   } catch {
     return null;
   }
+}
+
+export function recipientFromChatId(chatId) {
+  if (!chatId || typeof chatId !== 'string') return '';
+  const personalChatMatch = chatId.match(/^(\d+)@c\.us$/);
+  if (personalChatMatch) return personalChatMatch[1];
+  return '';
 }

@@ -33,7 +33,6 @@ export class GeminiClient {
       system_instruction: this.systemPrompt,
       generation_config: {
         temperature: 0.7,
-        thinking_level: 'low',
       },
     };
 
