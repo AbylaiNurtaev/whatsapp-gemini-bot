@@ -4,8 +4,11 @@ export function parseIncomingMessages(payload) {
   const messages = [];
   const candidates = [
     payload.message,
+    payload.data,
+    payload.payload,
     ...(Array.isArray(payload.messages) ? payload.messages : []),
     ...(Array.isArray(payload.data?.messages) ? payload.data.messages : []),
+    ...(Array.isArray(payload.payload?.messages) ? payload.payload.messages : []),
   ].filter(Boolean);
 
   if (looksLikeMessage(payload)) {
@@ -18,8 +21,14 @@ export function parseIncomingMessages(payload) {
   }
 
   return messages.filter((message) => {
-    const eventType = message.eventType || payload.type || payload.webhook_type || payload.event;
-    if (eventType && eventType !== 'incoming_message') return false;
+    const eventType =
+      message.eventType ||
+      payload.type_webhook ||
+      payload.webhook_type ||
+      payload.type ||
+      payload.event?.type ||
+      payload.event;
+    if (eventType && !isIncomingEvent(eventType)) return false;
     if (message.fromMe || message.isFromApi) return false;
     return Boolean(message.chatId || message.recipient) && Boolean(message.text);
   });
@@ -28,15 +37,26 @@ export function parseIncomingMessages(payload) {
 function parseMessage(message, root) {
   const text =
     message.body ||
+    message.text?.body ||
+    message.message?.body ||
+    message.message?.text ||
+    message.messageData?.textMessageData?.textMessage ||
+    message.messageData?.extendedTextMessageData?.text ||
+    message.messageData?.caption ||
     message.text ||
     message.message ||
     message.caption ||
     message.content?.text ||
-    message.text?.body;
+    message.content?.body;
 
   const chatId =
     message.chat_id ||
     message.chatId ||
+    message.chat_id?._serialized ||
+    message.chatId?._serialized ||
+    message.id?.remote ||
+    message.senderData?.chatId ||
+    message.senderData?.sender ||
     message.from ||
     message.sender ||
     message.author ||
@@ -48,6 +68,7 @@ function parseMessage(message, root) {
     message.recipient ||
     message.phone ||
     message.from_phone ||
+    message.senderData?.sender ||
     root.recipient ||
     root.phone;
 
@@ -56,8 +77,21 @@ function parseMessage(message, root) {
     chatId,
     recipient,
     text: typeof text === 'string' ? text.trim() : '',
-    eventType: message.type_webhook || message.webhook_type || message.event || root.type_webhook,
-    fromMe: Boolean(message.fromMe || message.from_me || message.is_from_me || message.isMe),
+    eventType:
+      message.type_webhook ||
+      message.webhook_type ||
+      message.event?.type ||
+      message.event ||
+      root.type_webhook ||
+      root.webhook_type,
+    fromMe: Boolean(
+      message.fromMe ||
+        message.from_me ||
+        message.is_from_me ||
+        message.isMe ||
+        message.fromMe === true ||
+        message.id?.fromMe === true
+    ),
     isFromApi: Boolean(message.isFromAPI || message.is_from_api),
   };
 }
@@ -67,8 +101,20 @@ function looksLikeMessage(payload) {
     payload.body ||
       payload.text ||
       payload.message ||
+      payload.messageData ||
       payload.chat_id ||
       payload.chatId ||
+      payload.senderData ||
       payload.recipient
   );
+}
+
+function isIncomingEvent(eventType) {
+  return [
+    'incoming_message',
+    'message',
+    'messages',
+    'messages.post',
+    'incoming',
+  ].includes(String(eventType));
 }

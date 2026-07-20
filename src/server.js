@@ -22,12 +22,32 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true });
 });
 
+app.post('/debug/parse-webhook', (req, res) => {
+  if (process.env.NODE_ENV === 'production' && !config.webhookAuth) {
+    return res.status(404).json({ ok: false });
+  }
+
+  res.json({
+    ok: true,
+    parsed: parseIncomingMessages(req.body),
+  });
+});
+
 app.post('/webhook', async (req, res) => {
   if (!isAuthorizedWebhook(req)) {
     return res.status(401).json({ ok: false, error: 'Unauthorized webhook' });
   }
 
   const incomingMessages = parseIncomingMessages(req.body);
+  console.log('Webhook received', {
+    accepted: incomingMessages.length,
+    payloadKeys: Object.keys(req.body || {}),
+    event: req.body?.event,
+    type: req.body?.type,
+    typeWebhook: req.body?.type_webhook,
+    webhookType: req.body?.webhook_type,
+  });
+
   res.status(200).json({ ok: true, accepted: incomingMessages.length });
 
   for (const message of incomingMessages) {
@@ -43,24 +63,49 @@ app.post('/webhook', async (req, res) => {
 
 async function handleMessage(message) {
   const dedupeKey = message.id || `${message.chatId || message.recipient}:${message.text}`;
-  if (processedMessages.has(dedupeKey)) return;
+  if (processedMessages.has(dedupeKey)) {
+    console.log('Skipping duplicate incoming message', {
+      messageId: message.id,
+      chatId: message.chatId,
+    });
+    return;
+  }
   processedMessages.set(dedupeKey, true);
 
   const chatKey = message.chatId || message.recipient;
+  console.log('Handling incoming message', {
+    messageId: message.id,
+    chatId: message.chatId,
+    recipient: message.recipient,
+    textLength: message.text.length,
+  });
+
   const previousInteractionId = conversations.get(chatKey);
   const geminiResponse = await gemini.reply({
     input: message.text,
     previousInteractionId,
   });
 
+  console.log('Gemini response generated', {
+    chatKey,
+    hasInteractionId: Boolean(geminiResponse.interactionId),
+    textLength: geminiResponse.text.length,
+  });
+
   if (geminiResponse.interactionId) {
     conversations.set(chatKey, geminiResponse.interactionId);
   }
 
-  await wappi.sendText({
+  const result = await wappi.sendText({
     chatId: message.chatId,
     recipient: message.recipient,
     body: trimForWhatsApp(geminiResponse.text),
+  });
+
+  console.log('Wappi reply sent', {
+    chatId: message.chatId,
+    recipient: message.recipient,
+    result,
   });
 }
 
