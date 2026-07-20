@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { SYSTEM_PROMPT } from './system-prompt.js';
 
 function required(name) {
   const value = process.env[name]?.trim();
@@ -26,9 +27,7 @@ export function loadConfig() {
         .map((model) => model.trim())
         .filter(Boolean),
       timeoutMs: Number(process.env.HTTP_TIMEOUT_MS || 20_000),
-      systemPrompt:
-        process.env.BOT_SYSTEM_PROMPT?.trim() ||
-        'Ты дружелюбный WhatsApp-ассистент компании. Отвечай кратко, понятно и по делу на языке пользователя. Если не хватает данных, задай один уточняющий вопрос.',
+      systemPrompt: SYSTEM_PROMPT,
     },
     webhookAuth: process.env.WEBHOOK_AUTH?.trim() || '',
     publicBaseUrl: process.env.PUBLIC_BASE_URL?.trim() || '',
